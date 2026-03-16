@@ -9,6 +9,7 @@ final class WalkViewModel: ObservableObject {
     // MARK: - Published State
     @Published var entries: [WalkEntry] = []
     @Published var inputKmText: String = ""
+    @Published var selectedDate: Date = Date()
     @Published var showResetConfirm: Bool = false
 
     // MARK: - Computed Properties
@@ -45,10 +46,12 @@ final class WalkViewModel: ObservableObject {
             return
         }
 
-        let entry = WalkEntry(distance: km)
-        entries.insert(entry, at: 0)
+        let entry = WalkEntry(date: selectedDate, distance: km)
+        entries.append(entry)
+        entries.sort { $0.date > $1.date }
         saveEntries()
         inputKmText = ""
+        selectedDate = Date()
     }
 
     func deleteEntry(id: UUID) {

@@ -24,6 +24,7 @@ struct ContentView: View {
 
                     InputRowView(
                         text: $viewModel.inputKmText,
+                        selectedDate: $viewModel.selectedDate,
                         isFocused: $isInputFocused,
                         onAdd: {
                             viewModel.addEntry()
@@ -182,14 +183,25 @@ struct StatCard: View {
 
 struct InputRowView: View {
     @Binding var text: String
+    @Binding var selectedDate: Date
     var isFocused: FocusState<Bool>.Binding
     let onAdd: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("오늘 걸은 거리 추가")
+            Text("걷기 기록 추가")
                 .font(.headline)
                 .foregroundColor(.primary)
+
+            DatePicker(
+                "날짜 및 시간",
+                selection: $selectedDate,
+                in: ...Date(),
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .datePickerStyle(.compact)
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 10) {
                 TextField("0.0", text: $text)

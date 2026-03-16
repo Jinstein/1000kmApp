@@ -21,6 +21,9 @@ class WalkViewModel(application: Application) : AndroidViewModel(application) {
     private val _inputKmText = MutableStateFlow("")
     val inputKmText: StateFlow<String> = _inputKmText.asStateFlow()
 
+    private val _selectedDateMillis = MutableStateFlow(System.currentTimeMillis())
+    val selectedDateMillis: StateFlow<Long> = _selectedDateMillis.asStateFlow()
+
     val totalDistance: Double
         get() = _entries.value.sumOf { it.distance }
 
@@ -41,14 +44,19 @@ class WalkViewModel(application: Application) : AndroidViewModel(application) {
         _inputKmText.value = text
     }
 
+    fun updateSelectedDate(millis: Long) {
+        _selectedDateMillis.value = millis
+    }
+
     fun addEntry() {
         val normalized = _inputKmText.value.replace(",", ".")
         val distance = normalized.toDoubleOrNull() ?: return
         if (distance <= 0 || distance > 500) return
 
-        val newEntry = WalkEntry(distance = distance)
-        _entries.value = listOf(newEntry) + _entries.value
+        val newEntry = WalkEntry(dateMillis = _selectedDateMillis.value, distance = distance)
+        _entries.value = (_entries.value + newEntry).sortedByDescending { it.dateMillis }
         _inputKmText.value = ""
+        _selectedDateMillis.value = System.currentTimeMillis()
         saveEntries()
     }
 

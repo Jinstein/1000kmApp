@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -58,13 +59,15 @@ class MainActivity : ComponentActivity() {
 fun WalkChallengeApp(vm: WalkViewModel = viewModel()) {
     val entries by vm.entries.collectAsStateWithLifecycle()
     val inputText by vm.inputKmText.collectAsStateWithLifecycle()
+    val selectedDateMillis by vm.selectedDateMillis.collectAsStateWithLifecycle()
     var showResetDialog by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
-    val totalDistance = vm.totalDistance
-    val remainingDistance = vm.remainingDistance
-    val progress = vm.progress
-    val goalReached = vm.goalReached
+    // Bug fix: compute directly from entries state so recompose triggers correctly
+    val totalDistance = entries.sumOf { it.distance }
+    val remainingDistance = maxOf(0.0, 1000.0 - totalDistance)
+    val progress = (totalDistance / 1000.0).coerceIn(0.0, 1.0).toFloat()
+    val goalReached = totalDistance >= 1000.0
 
     Scaffold(
         topBar = {
@@ -107,7 +110,9 @@ fun WalkChallengeApp(vm: WalkViewModel = viewModel()) {
             item {
                 InputRow(
                     inputText = inputText,
+                    selectedDateMillis = selectedDateMillis,
                     onInputChange = { vm.updateInput(it) },
+                    onDateSelected = { vm.updateSelectedDate(it) },
                     onAdd = {
                         vm.addEntry()
                         focusManager.clearFocus()
@@ -317,39 +322,142 @@ fun StatCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InputRow(
     inputText: String,
+    selectedDateMillis: Long,
     onInputChange: (String) -> Unit,
+    onDateSelected: (Long) -> Unit,
     onAdd: () -> Unit
 ) {
-    Row(
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    var pendingDateMillis by remember { mutableLongStateOf(selectedDateMillis) }
+
+    val dateFormat = SimpleDateFormat("yyyy.MM.dd (E) HH:mm", Locale.KOREAN)
+    val displayDate = dateFormat.format(Date(selectedDateMillis))
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        OutlinedTextField(
-            value = inputText,
-            onValueChange = onInputChange,
-            modifier = Modifier.weight(1f),
-            placeholder = { Text("오늘 걸은 거리 (km)") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Decimal,
-                imeAction = ImeAction.Done
-            ),
-            keyboardActions = KeyboardActions(onDone = { onAdd() }),
-            shape = RoundedCornerShape(12.dp)
-        )
-        Button(
-            onClick = onAdd,
-            modifier = Modifier.height(56.dp),
+        // Date selector row
+        OutlinedCard(
+            onClick = { showDatePicker = true },
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Text("추가", fontSize = 16.sp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DateRange,
+                    contentDescription = "날짜 선택",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    displayDate,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Distance input row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = inputText,
+                onValueChange = onInputChange,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("오늘 걸은 거리 (km)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(onDone = { onAdd() }),
+                shape = RoundedCornerShape(12.dp)
+            )
+            Button(
+                onClick = onAdd,
+                modifier = Modifier.height(56.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("추가", fontSize = 16.sp)
+            }
+        }
+    }
+
+    // Date picker dialog
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = selectedDateMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val selected = datePickerState.selectedDateMillis
+                    if (selected != null) {
+                        pendingDateMillis = selected
+                        showDatePicker = false
+                        showTimePicker = true
+                    }
+                }) { Text("다음") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("취소") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    // Time picker dialog
+    if (showTimePicker) {
+        val cal = Calendar.getInstance().apply { timeInMillis = selectedDateMillis }
+        val timePickerState = rememberTimePickerState(
+            initialHour = cal.get(Calendar.HOUR_OF_DAY),
+            initialMinute = cal.get(Calendar.MINUTE)
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val finalCal = Calendar.getInstance().apply {
+                        timeInMillis = pendingDateMillis
+                        set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                        set(Calendar.MINUTE, timePickerState.minute)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    onDateSelected(finalCal.timeInMillis)
+                    showTimePicker = false
+                }) { Text("확인") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("취소") }
+            },
+            title = { Text("시간 선택") },
+            text = {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
+                    TimePicker(state = timePickerState)
+                }
+            }
+        )
     }
 }
 
