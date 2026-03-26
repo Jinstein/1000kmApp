@@ -61,10 +61,10 @@ fun WalkChallengeApp(vm: WalkViewModel = viewModel()) {
     var showResetDialog by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
-    val totalDistance = vm.totalDistance
-    val remainingDistance = vm.remainingDistance
-    val progress = vm.progress
-    val goalReached = vm.goalReached
+    val totalDistance = entries.sumOf { it.distance }
+    val remainingDistance = maxOf(0.0, 1000.0 - totalDistance)
+    val progress = (totalDistance / 1000.0).coerceIn(0.0, 1.0).toFloat()
+    val goalReached = totalDistance >= 1000.0
 
     Scaffold(
         topBar = {

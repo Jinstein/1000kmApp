@@ -13,25 +13,12 @@ class WalkViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("walk_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
-    private val goalDistance = 1000.0
 
     private val _entries = MutableStateFlow<List<WalkEntry>>(emptyList())
     val entries: StateFlow<List<WalkEntry>> = _entries.asStateFlow()
 
     private val _inputKmText = MutableStateFlow("")
     val inputKmText: StateFlow<String> = _inputKmText.asStateFlow()
-
-    val totalDistance: Double
-        get() = _entries.value.sumOf { it.distance }
-
-    val remainingDistance: Double
-        get() = maxOf(0.0, goalDistance - totalDistance)
-
-    val progress: Float
-        get() = (totalDistance / goalDistance).coerceIn(0.0, 1.0).toFloat()
-
-    val goalReached: Boolean
-        get() = totalDistance >= goalDistance
 
     init {
         loadEntries()
