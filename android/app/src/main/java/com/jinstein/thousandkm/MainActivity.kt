@@ -1,5 +1,6 @@
 package com.jinstein.thousandkm
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +17,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.viewinterop.AndroidView
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.MobileAds
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,6 +47,7 @@ import java.util.*
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        MobileAds.initialize(this)
         setContent {
             MaterialTheme {
                 Surface(
@@ -56,9 +64,12 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalkChallengeApp(vm: WalkViewModel = viewModel()) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val entries by vm.entries.collectAsStateWithLifecycle()
     val inputText by vm.inputKmText.collectAsStateWithLifecycle()
+    val selectedDateMillis by vm.selectedDateMillis.collectAsStateWithLifecycle()
     var showResetDialog by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
     val totalDistance = entries.sumOf { it.distance }
@@ -67,6 +78,9 @@ fun WalkChallengeApp(vm: WalkViewModel = viewModel()) {
     val goalReached = totalDistance >= 1000.0
 
     Scaffold(
+        bottomBar = {
+            BannerAdView()
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -76,6 +90,24 @@ fun WalkChallengeApp(vm: WalkViewModel = viewModel()) {
                     )
                 },
                 actions = {
+                    IconButton(onClick = {
+                        val shareText = buildString {
+                            appendLine("🚶 1000km 챌린지 진행 중!")
+                            appendLine("📍 총 거리: ${String.format("%.2f", totalDistance)} km")
+                            appendLine("📊 달성률: ${String.format("%.1f", (progress * 100).coerceIn(0f, 100f))}%")
+                            appendLine("🎯 남은 거리: ${String.format("%.2f", remainingDistance)} km")
+                        }
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, shareText)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "공유하기"))
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "공유"
+                        )
+                    }
                     TextButton(onClick = { showResetDialog = true }) {
                         Text("리셋", color = MaterialTheme.colorScheme.error)
                     }
@@ -107,11 +139,13 @@ fun WalkChallengeApp(vm: WalkViewModel = viewModel()) {
             item {
                 InputRow(
                     inputText = inputText,
+                    selectedDateMillis = selectedDateMillis,
                     onInputChange = { vm.updateInput(it) },
                     onAdd = {
                         vm.addEntry()
                         focusManager.clearFocus()
-                    }
+                    },
+                    onDateClick = { showDatePicker = true }
                 )
             }
             item {
@@ -141,6 +175,31 @@ fun WalkChallengeApp(vm: WalkViewModel = viewModel()) {
                     onDelete = { vm.deleteEntry(entry.id) }
                 )
             }
+        }
+    }
+
+    if (showDatePicker) {
+        val utcMidnight = remember(selectedDateMillis) {
+            val cal = Calendar.getInstance().apply { timeInMillis = selectedDateMillis }
+            Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                set(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH), 0, 0, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+        }
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = utcMidnight)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { vm.updateSelectedDate(it) }
+                    showDatePicker = false
+                }) { Text("확인") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("취소") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 
@@ -320,37 +379,72 @@ fun StatCard(
 @Composable
 fun InputRow(
     inputText: String,
+    selectedDateMillis: Long,
     onInputChange: (String) -> Unit,
-    onAdd: () -> Unit
+    onAdd: () -> Unit,
+    onDateClick: () -> Unit
 ) {
-    Row(
+    val dateFormat = remember { SimpleDateFormat("yyyy.MM.dd (E)", Locale.KOREAN) }
+    val isToday = remember(selectedDateMillis) {
+        val sel = Calendar.getInstance().apply { timeInMillis = selectedDateMillis }
+        val today = Calendar.getInstance()
+        sel.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
+        sel.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)
+    }
+    val dateLabel = if (isToday) "오늘" else dateFormat.format(Date(selectedDateMillis))
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        OutlinedTextField(
-            value = inputText,
-            onValueChange = onInputChange,
-            modifier = Modifier.weight(1f),
-            placeholder = { Text("오늘 걸은 거리 (km)") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Decimal,
-                imeAction = ImeAction.Done
-            ),
-            keyboardActions = KeyboardActions(onDone = { onAdd() }),
-            shape = RoundedCornerShape(12.dp)
-        )
-        Button(
-            onClick = onAdd,
-            modifier = Modifier.height(56.dp),
-            shape = RoundedCornerShape(12.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("추가", fontSize = 16.sp)
+            OutlinedTextField(
+                value = inputText,
+                onValueChange = onInputChange,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("걸은 거리 (km)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(onDone = { onAdd() }),
+                shape = RoundedCornerShape(12.dp)
+            )
+            Button(
+                onClick = onAdd,
+                modifier = Modifier.height(56.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("추가", fontSize = 16.sp)
+            }
+        }
+        TextButton(onClick = onDateClick) {
+            Text(
+                "날짜: $dateLabel",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
+}
+
+@Composable
+fun BannerAdView() {
+    AndroidView(
+        factory = { context ->
+            AdView(context).apply {
+                setAdSize(AdSize.BANNER)
+                adUnitId = "ca-app-pub-3940256099942544/6300978111"
+                loadAd(AdRequest.Builder().build())
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

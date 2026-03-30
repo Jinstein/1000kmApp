@@ -8,6 +8,8 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.Calendar
+import java.util.TimeZone
 
 class WalkViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -19,6 +21,20 @@ class WalkViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _inputKmText = MutableStateFlow("")
     val inputKmText: StateFlow<String> = _inputKmText.asStateFlow()
+
+    private val _selectedDateMillis = MutableStateFlow(System.currentTimeMillis())
+    val selectedDateMillis: StateFlow<Long> = _selectedDateMillis.asStateFlow()
+
+    fun updateSelectedDate(utcDateMillis: Long) {
+        val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+            timeInMillis = utcDateMillis
+        }
+        val localCal = Calendar.getInstance().apply {
+            set(utcCal.get(Calendar.YEAR), utcCal.get(Calendar.MONTH), utcCal.get(Calendar.DAY_OF_MONTH), 12, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        _selectedDateMillis.value = localCal.timeInMillis
+    }
 
     init {
         loadEntries()
@@ -33,9 +49,10 @@ class WalkViewModel(application: Application) : AndroidViewModel(application) {
         val distance = normalized.toDoubleOrNull() ?: return
         if (distance <= 0 || distance > 500) return
 
-        val newEntry = WalkEntry(distance = distance)
+        val newEntry = WalkEntry(distance = distance, dateMillis = _selectedDateMillis.value)
         _entries.value = listOf(newEntry) + _entries.value
         _inputKmText.value = ""
+        _selectedDateMillis.value = System.currentTimeMillis()
         saveEntries()
     }
 

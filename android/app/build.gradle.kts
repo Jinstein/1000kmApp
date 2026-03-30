@@ -16,9 +16,19 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("C:\\Users\\cokou\\1000km-release.jks")
+            storePassword = "131313"
+            keyAlias = "1000km"
+            keyPassword = "131313"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -48,5 +58,6 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.gson)
+    implementation(libs.play.services.ads)
     debugImplementation(libs.androidx.ui.tooling)
 }
