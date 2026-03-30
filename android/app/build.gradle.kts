@@ -59,5 +59,6 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.gson)
     implementation(libs.play.services.ads)
+    implementation("androidx.startup:startup-runtime:1.1.1")
     debugImplementation(libs.androidx.ui.tooling)
 }
