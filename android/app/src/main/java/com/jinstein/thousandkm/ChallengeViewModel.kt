@@ -29,8 +29,26 @@ class ChallengeViewModel(application: Application) : AndroidViewModel(applicatio
         loadChallenges()
     }
 
-    fun addChallenge(name: String, goal: Double, unit: String, emoji: String) {
-        val challenge = Challenge(name = name, goal = goal, unit = unit, emoji = emoji)
+    fun addChallenge(
+        name: String,
+        unit: String,
+        emoji: String,
+        photoUri: String? = null,
+        finalGoal: Double?,
+        dailyGoal: Double?,
+        monthlyGoal: Double?,
+        yearlyGoal: Double?
+    ) {
+        val challenge = Challenge(
+            name = name,
+            unit = unit,
+            emoji = emoji,
+            photoUri = photoUri,
+            finalGoal = finalGoal,
+            dailyGoal = dailyGoal,
+            monthlyGoal = monthlyGoal,
+            yearlyGoal = yearlyGoal
+        )
         _challenges.value = _challenges.value + challenge
         saveChallenges()
     }
@@ -88,7 +106,18 @@ class ChallengeViewModel(application: Application) : AndroidViewModel(applicatio
     private fun loadChallenges() {
         val json = prefs.getString("challenges", null) ?: return
         val type = object : TypeToken<List<Challenge>>() {}.type
-        _challenges.value = gson.fromJson(json, type) ?: emptyList()
+        val loaded: List<Challenge> = gson.fromJson(json, type) ?: emptyList()
+
+        // Migrate legacy `goal` field to `finalGoal`
+        var needsSave = false
+        val migrated = loaded.map { c ->
+            if (c.goal != null && c.finalGoal == null) {
+                needsSave = true
+                c.copy(finalGoal = c.goal, goal = null)
+            } else c
+        }
+        _challenges.value = migrated
+        if (needsSave) saveChallenges()
     }
 
     private fun saveChallenges() {
